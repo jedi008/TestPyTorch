@@ -1,0 +1,10 @@
+/data
+hymenoptera_data
+hymenoptera_data.zip
+savepath/*
+logs
+runs
+*.pt
+*.pth
+*.pyc
+__pycache__
