@@ -11,7 +11,7 @@ from PIL import Image, ExifTags
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
-from build_utils.utils import xyxy2xywh, xywh2xyxy
+from build_utils.utils import *
 from build_utils import img_utils, torch_utils, utils
 
 import yaml
@@ -98,6 +98,8 @@ class ImagesAndLabelsSet(Dataset):  # for training/testing
         self.imgs = [None] * img_files_number  # n为图像总数
         # label: [class, x, y, w, h] 其中的xywh都为相对值
         self.labels = [np.zeros((0, 5), dtype=np.float32)] * img_files_number
+        self.segments = [np.zeros((0, 5), dtype=np.float32)] * img_files_number #for jedi test segments
+
         labels_loaded = False
         mission_number, found_number, empty_number, duplicate_number = 0, 0, 0, 0
 
@@ -172,7 +174,7 @@ class ImagesAndLabelsSet(Dataset):  # for training/testing
         self.augment = False
         if self.mosaic:
             # load mosaic
-            img, labels = load_mosaic(self, index)
+            img, labels = load_mosaic2(self, index)
             shapes = None
         else:
             # load image
@@ -375,6 +377,73 @@ def load_mosaic(self, index):
 
     return img4, labels4
 
+
+def load_mosaic2(self, index):
+    """
+    将四张图片拼接在一张马赛克图像中
+    :param self:
+    :param index: 需要获取的图像索引
+    :return:
+    """
+    # loads images in a mosaic
+
+    labels4, segments4 = [], []
+    s = self.img_size
+
+    indices = [index] + [random.randint(0, len(self.labels) - 1) for _ in range(3)]  # 3 additional image indices
+    
+    for i, index in enumerate(indices):
+        # load image
+        img, _, (h, w) = load_image(self, index)
+
+        if i == 0:  # top left
+            img4 = np.full((s * 2, s * 2, img.shape[2]), 114, dtype=np.uint8)  # base image with 4 tiles
+            padw = s - w
+            padh = s - h
+        elif i == 1:  # top right
+            padw = s
+            padh = s - h
+        elif i == 2:  # bottom left
+            padw = s - w
+            padh = s
+        else:         # bottom right
+            padw = s
+            padh = s
+        
+        img4[padh:padh+h, padw:padw+w] = img
+
+        # Labels
+        labels, segments = self.labels[index].copy(), self.segments[index].copy()
+        if labels.size:
+            labels[:, 1:] = xywhn2xyxy(labels[:, 1:], w, h, padw, padh)  # normalized xywh to pixel xyxy format
+            segments = [xyn2xy(x, w, h, padw, padh) for x in segments]
+        labels4.append(labels)
+        segments4.extend(segments)
+
+
+    # cv2.imshow("img4  test",img4)
+    # cv2.waitKey(0)
+    # exit(0)
+
+
+    # Concat/clip labels
+    labels4 = np.concatenate(labels4, 0)
+
+    #cv2.imshow("img4",img4)
+
+
+    # Augment
+    # 随机旋转，缩放，平移以及错切
+    img4, labels4 = random_affine(img4, labels4,
+                                degrees=0.,
+                                translate=0.25,
+                                scale=0.,
+                                shear=0.,
+                                border=-s // 2)  # border to remove
+
+
+    return img4, labels4
+
 def random_affine(img, targets=(), degrees=10, translate=.1, scale=.1, shear=10, border=0):
     """随机旋转，缩放，平移以及错切"""
     # torchvision.transforms.RandomAffine(degrees=(-10, 10), translate=(.1, .1), scale=(.9, 1.1), shear=(-10, 10))
@@ -388,7 +457,6 @@ def random_affine(img, targets=(), degrees=10, translate=.1, scale=.1, shear=10,
     # Rotation and Scale
     # 生成旋转以及缩放矩阵
     R = np.eye(3)  # 生成对角阵
-    degrees = 30
     a = random.uniform(-degrees, degrees)  # 随机旋转角度
     s = random.uniform(1 - scale, 1 + scale)  # 随机缩放因子
     R[:2] = cv2.getRotationMatrix2D(angle=a, center=(img.shape[1] / 2, img.shape[0] / 2), scale=s)
@@ -560,4 +628,4 @@ if __name__ == '__main__':
             key = cv2.waitKey(3000000)
             if(key & 0xFF == ord('q')):
                 break
-        break
+        #break
