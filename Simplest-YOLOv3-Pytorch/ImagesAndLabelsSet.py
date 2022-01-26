@@ -567,7 +567,7 @@ if __name__ == '__main__':
 
     print("opt: ",opt)
 
-    train_path = "D:/pythonproject/Detection/UPUP/deep-learning-for-image-processing-master/pytorch_object_detection/yolov3_spp/data/my_train_data.txt"
+    train_path = "G:/AIData/MyYoloTestSource/data/my_train_data.txt"
 
 
     train_dataset = ImagesAndLabelsSet(train_path, 512, batch_size=opt.batch_size )
@@ -596,7 +596,7 @@ if __name__ == '__main__':
             scores = torch.ones_like(target[:,1]).cpu().numpy()
             classes = target[:, 1].detach().cpu().numpy().astype(np.int) + 1
 
-            basepath = "D:/pythonproject/Detection/UPUP/deep-learning-for-image-processing-master/pytorch_object_detection/yolov3_spp"
+            basepath = "G:/AIData/MyYoloTestSource"
             weights = basepath+"/weights/yolov3spp-voc-512.pt"  # 改成自己训练好的权重文件
             json_path = basepath+"/data/pascal_voc_classes.json"  # json标签文件
             assert os.path.exists(json_path), "json file {} dose not exist.".format(json_path)
