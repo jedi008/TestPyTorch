@@ -19,6 +19,7 @@ import argparse
 import matplotlib.pyplot as plt
 from draw_box_utils import draw_box
 import json
+import sys
 
 
 img_formats = ['.bmp', '.jpg', '.jpeg', '.png', '.tif', '.dng']
@@ -63,6 +64,7 @@ class ImagesAndLabelsSet(Dataset):  # for training/testing
         self.img_number = img_files_number  # number of images 图像总数目
         self.batch_index = batch_index  # batch index of image 记录哪些图片属于哪个batch
         self.img_size = img_size  # 这里设置的是预处理后输出的图片尺寸
+        self.mosaic_border = [-img_size // 2, -img_size // 2]
 
         # Define labels
         # 遍历设置图像对应的label路径
@@ -174,7 +176,7 @@ class ImagesAndLabelsSet(Dataset):  # for training/testing
         self.augment = False
         if self.mosaic:
             # load mosaic
-            img, labels = load_mosaic2(self, index)
+            img, labels = load_mosaic9(self, index)
             shapes = None
         else:
             # load image
@@ -299,12 +301,15 @@ def load_mosaic(self, index):
     """
     # loads images in a mosaic
 
-    labels4 = []  # 拼接图像的label信息
+    print("func: ",sys._getframe().f_code.co_name)
+
+    labels4, segments4 = [], []  # 拼接图像的label信息
     s = self.img_size
     # 随机初始化拼接图像的中心点坐标
     xc, yc = [int(random.uniform(s * 0.5, s * 1.5)) for _ in range(2)]  # mosaic center x, y
     # 从dataset中随机寻找三张图像进行拼接
     indices = [index] + [random.randint(0, len(self.labels) - 1) for _ in range(3)]  # 3 additional image indices
+
     # 遍历四张图像进行拼接
     for i, index in enumerate(indices):
         # load image
@@ -363,16 +368,25 @@ def load_mosaic(self, index):
 
     # Augment
     # 随机旋转，缩放，平移以及错切
-    img4, labels4 = random_affine(img4, labels4,
-                                  degrees=0.,
-                                  translate=0.,
-                                  scale=0.,
-                                  shear=0.,
-                                  border=-s // 2)  # border to remove
+    # img4, labels4 = random_affine(img4, labels4,
+    #                               degrees=0.,
+    #                               translate=0.1,
+    #                               scale=0.,
+    #                               shear=0.,
+    #                               border=-s // 2)  # border to remove
+    
+    #cv2.imshow("before: ",img4)
 
-    #cv2.imshow("img4-2",img4)
-    #cv2.waitKey(10000)
-    #exit(0)
+    img4, labels4 = random_perspective(img4, labels4, segments4,
+                                degrees=0.,
+                                translate=0.1,
+                                scale=0.,
+                                shear=0.,
+                                perspective=0.,
+                                border=(-256,-256))  # border to remove
+
+    #cv2.imshow("after: ",img4)
+    #cv2.waitKey(99999999)
 
 
     return img4, labels4
@@ -386,6 +400,8 @@ def load_mosaic2(self, index):
     :return:
     """
     # loads images in a mosaic
+    print("func: ",sys._getframe().f_code.co_name)
+    print("index: ",index)
 
     labels4, segments4 = [], []
     s = self.img_size
@@ -421,11 +437,6 @@ def load_mosaic2(self, index):
         segments4.extend(segments)
 
 
-    # cv2.imshow("img4  test",img4)
-    # cv2.waitKey(0)
-    # exit(0)
-
-
     # Concat/clip labels
     labels4 = np.concatenate(labels4, 0)
 
@@ -434,136 +445,107 @@ def load_mosaic2(self, index):
 
     # Augment
     # 随机旋转，缩放，平移以及错切
-    img4, labels4 = random_affine(img4, labels4,
-                                degrees=0.,
-                                translate=0.25,
-                                scale=0.,
-                                shear=0.,
-                                border=-s // 2)  # border to remove
+    # img4, labels4 = random_affine(img4, labels4,
+    #                             degrees=0.,
+    #                             translate=0.,
+    #                             scale=0.,
+    #                             shear=0.,
+    #                             border=-s // 2)  # border to remove
+
+    # cv2.imshow("before: ",img4)
+    
+    img4, labels4 = random_perspective(img4, labels4, segments4,
+                                    degrees=0.,
+                                    translate=0.5 + 0.1,
+                                    scale=0.,
+                                    shear=0.,
+                                    perspective=0.,
+                                    border=(-256,-256))  # border to remove
+    
+    # cv2.imshow("after: ",img4)
+    # cv2.waitKey(99999999)
 
 
     return img4, labels4
 
-def random_affine(img, targets=(), degrees=10, translate=.1, scale=.1, shear=10, border=0):
-    """随机旋转，缩放，平移以及错切"""
-    # torchvision.transforms.RandomAffine(degrees=(-10, 10), translate=(.1, .1), scale=(.9, 1.1), shear=(-10, 10))
-    # https://medium.com/uruvideo/dataset-augmentation-with-random-homographies-a8f4b44830d4
-    # targets = [cls, xyxy]
+def load_mosaic9(self, index):
+    # YOLOv5 9-mosaic loader. Loads 1 image + 8 random images into a 9-image mosaic
+    labels9, segments9 = [], []
+    s = self.img_size
+    #indices = [index] + random.choices(self.indices, k=8)  # 8 additional image indices
+    indices = [index] + [random.randint(0, len(self.labels) - 1) for _ in range(8)]  # 8 additional image indices
+    random.shuffle(indices)
+    for i, index in enumerate(indices):
+        # Load image
+        img, _, (h, w) = load_image(self, index)
 
-    # 给定的输入图像的尺寸(416/512/640)，等于img4.shape / 2
-    height = img.shape[0] + border * 2
-    width = img.shape[1] + border * 2
+        # place img in img9
+        if i == 0:  # center
+            img9 = np.full((s * 3, s * 3, img.shape[2]), 114, dtype=np.uint8)  # base image with 4 tiles
+            h0, w0 = h, w
+            c = s, s, s + w, s + h  # xmin, ymin, xmax, ymax (base) coordinates
+        elif i == 1:  # top
+            c = s, s - h, s + w, s
+        elif i == 2:  # top right
+            c = s + wp, s - h, s + wp + w, s
+        elif i == 3:  # right
+            c = s + w0, s, s + w0 + w, s + h
+        elif i == 4:  # bottom right
+            c = s + w0, s + hp, s + w0 + w, s + hp + h
+        elif i == 5:  # bottom
+            c = s + w0 - w, s + h0, s + w0, s + h0 + h
+        elif i == 6:  # bottom left
+            c = s + w0 - wp - w, s + h0, s + w0 - wp, s + h0 + h
+        elif i == 7:  # left
+            c = s - w, s + h0 - h, s, s + h0
+        else:  # top left
+            c = s - w, s + h0 - hp - h, s, s + h0 - hp
 
-    # Rotation and Scale
-    # 生成旋转以及缩放矩阵
-    R = np.eye(3)  # 生成对角阵
-    a = random.uniform(-degrees, degrees)  # 随机旋转角度
-    s = random.uniform(1 - scale, 1 + scale)  # 随机缩放因子
-    R[:2] = cv2.getRotationMatrix2D(angle=a, center=(img.shape[1] / 2, img.shape[0] / 2), scale=s)
+        padx, pady = c[:2]
+        x1, y1, x2, y2 = (max(x, 0) for x in c)  # allocate coords
 
-    # Translation
-    # 生成平移矩阵
-    T = np.eye(3)
-    T[0, 2] = random.uniform(-translate, translate) * img.shape[0] + border  # x translation (pixels)
-    T[1, 2] = random.uniform(-translate, translate) * img.shape[1] + border  # y translation (pixels)
+        # Labels
+        labels = self.labels[index].copy()
+        if labels.size:
+            labels[:, 1:] = xywhn2xyxy(labels[:, 1:], w, h, padx, pady)  # normalized xywh to pixel xyxy format
+            #segments = [xyn2xy(x, w, h, padx, pady) for x in segments]
+        labels9.append(labels)
 
-    # Shear
-    # 生成错切矩阵
-    S = np.eye(3)
-    S[0, 1] = math.tan(random.uniform(-shear, shear) * math.pi / 180)  # x shear (deg)
-    S[1, 0] = math.tan(random.uniform(-shear, shear) * math.pi / 180)  # y shear (deg)
+        # Image
+        img9[y1:y2, x1:x2] = img[y1 - pady:, x1 - padx:]  # img9[ymin:ymax, xmin:xmax]
+        hp, wp = h, w  # height, width previous
 
-    # Combined rotation matrix
-    M = S @ T @ R  # ORDER IS IMPORTANT HERE!!
-    if (border != 0) or (M != np.eye(3)).any():  # image changed
-        #依靠T进行平移，之后通过dsize只取了大图的左上角区域，实现了裁剪图片中间的目的
-        img = cv2.warpAffine(img, M[:2], dsize=(width, height), flags=cv2.INTER_LINEAR, borderValue=(114, 114, 114))
+    # # Offset
+    # yc, xc = (int(random.uniform(0, s)) for _ in self.mosaic_border)  # mosaic center x, y
+    # img9 = img9[yc:yc + 2 * s, xc:xc + 2 * s]
 
-    # Transform label coordinates
-    n = len(targets)
-    if n:
-        # warp points
-        xy = np.ones((n * 4, 3))
-        xy[:, :2] = targets[:, [1, 2, 3, 4, 1, 4, 3, 2]].reshape(n * 4, 2)  # x1y1, x2y2, x1y2, x2y1
-        # [4*n, 3] -> [n, 8]
-        xy = (xy @ M.T)[:, :2].reshape(n, 8)
+    # Concat/clip labels
+    labels9 = np.concatenate(labels9, 0)
+    # labels9[:, [1, 3]] -= xc
+    # labels9[:, [2, 4]] -= yc
+    # c = np.array([xc, yc])  # centers
+    # segments9 = [x - c for x in segments9]
 
-        # create new boxes
-        # 对transform后的bbox进行修正(假设变换后的bbox变成了菱形，此时要修正成矩形)
-        x = xy[:, [0, 2, 4, 6]]  # [n, 4]
-        y = xy[:, [1, 3, 5, 7]]  # [n, 4]
-        xy = np.concatenate((x.min(1), y.min(1), x.max(1), y.max(1))).reshape(4, n).T  # [n, 4]
+    for x in (labels9[:, 1:], *segments9):
+        np.clip(x, 0, 2 * s, out=x)  # clip when using random_perspective()
+    # img9, labels9 = replicate(img9, labels9)  # replicate
 
-        # reject warped points outside of image
-        # 对坐标进行裁剪，防止越界
-        xy[:, [0, 2]] = xy[:, [0, 2]].clip(0, width)
-        xy[:, [1, 3]] = xy[:, [1, 3]].clip(0, height)
-        w = xy[:, 2] - xy[:, 0]
-        h = xy[:, 3] - xy[:, 1]
+    cv2.imshow('img9 0', img9)
+    cv2.waitKey(0)
+    # Augment
+    img9, labels9 = random_perspective(img9, labels9, segments9,
+                                        degrees=0.,
+                                        translate=1.1,
+                                        scale=0.,
+                                        shear=0.,
+                                        perspective=0.,
+                                        border=[x - int(s/2) for x in self.mosaic_border])  # border to remove
 
-        # 计算调整后的每个box的面积
-        area = w * h
-        # 计算调整前的每个box的面积
-        area0 = (targets[:, 3] - targets[:, 1]) * (targets[:, 4] - targets[:, 2])
-        # 计算每个box的比例
-        ar = np.maximum(w / (h + 1e-16), h / (w + 1e-16))  # aspect ratio
-        # 选取长宽大于4个像素，且调整前后面积比例大于0.2，且比例小于10的box
-        i = (w > 4) & (h > 4) & (area / (area0 * s + 1e-16) > 0.2) & (ar < 10)
+    cv2.imshow('img9 1', img9)
+    cv2.waitKey(0)
 
-        targets = targets[i]
-        targets[:, 1:5] = xy[i]
+    return img9, labels9
 
-    return img, targets
-
-def letterbox(img: np.ndarray,
-              new_shape=(416, 416),
-              color=(114, 114, 114),
-              auto=True,
-              scale_fill=False,
-              scale_up=True):
-    """
-    将图片缩放调整到指定大小
-    :param img:
-    :param new_shape:
-    :param color:
-    :param auto:
-    :param scale_fill:
-    :param scale_up:
-    :return:
-    """
-
-    shape = img.shape[:2]  # [h, w]
-    if isinstance(new_shape, int):
-        new_shape = (new_shape, new_shape)
-
-    # scale ratio (new / old)
-    r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
-    if not scale_up:  # only scale down, do not scale up (for better test mAP) 对于大于指定输入大小的图片进行缩放,小于的不变
-        r = min(r, 1.0)
-
-    # compute padding
-    ratio = r, r  # width, height ratios
-    new_unpad = int(round(shape[1] * r)), int(round(shape[0] * r))
-    dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]  # wh padding
-    if auto:  # minimun rectangle 保证原图比例不变，将图像最大边缩放到指定大小
-        # 这里的取余操作可以保证padding后的图片是32的整数倍
-        dw, dh = np.mod(dw, 32), np.mod(dh, 32)  # wh padding
-    elif scale_fill:  # stretch 简单粗暴的将图片缩放到指定尺寸
-        dw, dh = 0, 0
-        new_unpad = new_shape
-        ratio = new_shape[0] / shape[1], new_shape[1] / shape[0]  # wh ratios
-
-    dw /= 2  # divide padding into 2 sides 将padding分到上下，左右两侧
-    dh /= 2
-
-    # shape:[h, w]  new_unpad:[w, h]
-    if shape[::-1] != new_unpad:
-        img = cv2.resize(img, new_unpad, interpolation=cv2.INTER_LINEAR)
-    top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))  # 计算上下两侧的padding
-    left, right = int(round(dw - 0.1)), int(round(dw + 0.1))  # 计算左右两侧的padding
-
-    img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # add border
-    return img, ratio, (dw, dh)
 
 def imshow(img):
     #img = img / 2 + 0.5     # unnormalize
@@ -574,7 +556,7 @@ def imshow(img):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--epochs', type=int, default=30)
-    parser.add_argument('--batch-size', type=int, default=2)
+    parser.add_argument('--batch-size', type=int, default=4)
     parser.add_argument('--cfg', type=str, default='D:/pythonproject/Detection/UPUP/deep-learning-for-image-processing-master/pytorch_object_detection/yolov3_spp/cfg/my_yolov3.cfg', help="*.cfg path")
     parser.add_argument('--data', type=str, default='D:/pythonproject/Detection/UPUP/deep-learning-for-image-processing-master/pytorch_object_detection/yolov3_spp/data/my_data.data', help='*.data path')
     parser.add_argument('--hyp', type=str, default='D:/pythonproject/Detection/UPUP/deep-learning-for-image-processing-master/pytorch_object_detection/yolov3_spp/cfg/hyp.yaml', help='hyperparameters path')
@@ -583,13 +565,15 @@ if __name__ == '__main__':
 
     opt = parser.parse_args()
 
+    print("opt: ",opt)
+
     train_path = "D:/pythonproject/Detection/UPUP/deep-learning-for-image-processing-master/pytorch_object_detection/yolov3_spp/data/my_train_data.txt"
 
 
-    train_dataset = ImagesAndLabelsSet(train_path, 512, batch_size=4 )
+    train_dataset = ImagesAndLabelsSet(train_path, 512, batch_size=opt.batch_size )
 
     train_dataloader = torch.utils.data.DataLoader(train_dataset,
-                                                   batch_size=4,
+                                                   batch_size=opt.batch_size,
                                                    num_workers=1,
                                                    # Shuffle=True unless rectangular training is used
                                                    shuffle= False,
@@ -601,7 +585,7 @@ if __name__ == '__main__':
         print("targets: ",targets)
 
 
-        for i in range(4):
+        for i in range(opt.batch_size):
             img_o = imgs[i]
 
             target = targets[targets[:,0]==i]
