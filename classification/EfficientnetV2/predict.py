@@ -23,8 +23,11 @@ def main():
          transforms.ToTensor(),
          transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])])
 
+    current_dir = os.path.dirname(__file__)
+    data_root = os.path.abspath(os.path.join(current_dir, "../.."))
+
     # load image
-    img_path = "../tulip.jpg"
+    img_path = os.path.join(data_root, "data", "flower_data", "flower_photos", "tulips", "10791227_7168491604.jpg")
     assert os.path.exists(img_path), "file: '{}' dose not exist.".format(img_path)
     img = Image.open(img_path)
     plt.imshow(img)
@@ -34,7 +37,7 @@ def main():
     img = torch.unsqueeze(img, dim=0)
 
     # read class_indict
-    json_path = './class_indices.json'
+    json_path = os.path.join(current_dir, "class_indices.json")
     assert os.path.exists(json_path), "file: '{}' dose not exist.".format(json_path)
 
     json_file = open(json_path, "r")
@@ -43,7 +46,7 @@ def main():
     # create model
     model = create_model(num_classes=5).to(device)
     # load model weights
-    model_weight_path = "./weights/model-29.pth"
+    model_weight_path = os.path.join(current_dir, "weights", "saved_model-tac-0.862-vac-0.940.pth")
     model.load_state_dict(torch.load(model_weight_path, map_location=device))
     model.eval()
     with torch.no_grad():

@@ -122,26 +122,17 @@ def train_one_epoch(model, optimizer, data_loader, device, epoch):
     sample_num = 0
     data_loader = tqdm(data_loader)
     for step, data in enumerate(data_loader):
-        if step > 5:
-            break
-
         images, labels = data
         sample_num += images.shape[0]
 
-        print("images shape:",images.shape)
-
         pred = model(images.to(device))
-
-        print("pred shape:",pred.shape)
 
         pred_classes = torch.max(pred, dim=1)[1]
         accu_num += torch.eq(pred_classes, labels.to(device)).sum()
 
         loss = loss_function(pred, labels.to(device))
 
-        print("loss.backward  000")
         loss.backward()
-        print("loss.backward  111")
         accu_loss += loss.detach()
 
         data_loader.desc = "[train epoch {}] loss: {:.3f}, acc: {:.3f}".format(epoch,
@@ -162,8 +153,6 @@ def train_one_epoch(model, optimizer, data_loader, device, epoch):
 def evaluate(model, data_loader, device, epoch):
     loss_function = torch.nn.CrossEntropyLoss()
     model.to(device)
-
-    print("device: ",device)
 
     model.eval()
 
