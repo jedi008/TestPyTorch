@@ -6,26 +6,21 @@ from PIL import Image
 from torchvision import transforms
 import matplotlib.pyplot as plt
 
-from model import efficientnetv2_s as create_model
+from model import resnet34
 
 
 def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    img_size = {"s": [300, 384],  # train_size, val_size
-                "m": [384, 480],
-                "l": [384, 480]}
-    num_model = "s"
-
     data_transform = transforms.Compose(
-        [transforms.Resize(img_size[num_model][1]),
-         transforms.CenterCrop(img_size[num_model][1]),
+        [transforms.Resize(256),
+         transforms.CenterCrop(224),
          transforms.ToTensor(),
-         transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])])
+         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
 
     current_dir = os.path.dirname(__file__)
     data_root = os.path.abspath(os.path.join(current_dir, "../.."))
-
+    
     # load image
     img_path = os.path.join(data_root, "data", "flower_data", "flower_photos", "tulips", "10791227_7168491604.jpg")
     assert os.path.exists(img_path), "file: '{}' dose not exist.".format(img_path)
@@ -44,10 +39,14 @@ def main():
     class_indict = json.load(json_file)
 
     # create model
-    model = create_model(num_classes=5).to(device)
+    model = resnet34(num_classes=5).to(device)
+
     # load model weights
-    model_weight_path = os.path.join(current_dir, "weights", "saved_model-tac-0.862-vac-0.940.pth")
-    model.load_state_dict(torch.load(model_weight_path, map_location=device))
+    weights_path = os.path.join(current_dir, "weights", "resNet34.pth")
+    assert os.path.exists(weights_path), "file: '{}' dose not exist.".format(weights_path)
+    model.load_state_dict(torch.load(weights_path, map_location=device))
+
+    # prediction
     model.eval()
     with torch.no_grad():
         # predict class

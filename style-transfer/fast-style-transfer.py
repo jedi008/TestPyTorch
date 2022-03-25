@@ -66,7 +66,13 @@ def get_gram_matrix(f_map):
     n, c, h, w = f_map.shape
     f_map = f_map.reshape(n, c, h * w)
     #gram_matrix = torch.matmul(f_map, f_map.transpose(1, 2))
+
+    #print("f_map: ",f_map.shape) # torch.Size([1, 128, 16384])
+    #print("f_map.transpose(1, 2): ",f_map.transpose(1, 2).shape) # torch.Size([1, 16384, 128])
+
     gram_matrix = torch.bmm(f_map, f_map.transpose(1, 2))
+
+    #print("gram_matrix: ",gram_matrix.shape) # torch.Size([1, 128, 128])
     return gram_matrix/ (c * h * w)
 
 
@@ -140,7 +146,7 @@ t_net = TransNet().cuda()
 
 optimizer = torch.optim.Adam(t_net.parameters())
 loss_func = nn.MSELoss().cuda()
-data_set = COCODataSet("C:/COCO/images/val2017",imgsize)
+data_set = COCODataSet("D:/work/Study/Data/COCO2017/val2017",imgsize)
 batch_size = 1
 data_loader = torch.utils.data.DataLoader(data_set, batch_size, True, drop_last=True)
 

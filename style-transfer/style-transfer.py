@@ -13,6 +13,7 @@ import torchvision.models as models
 import torchvision
  
 import copy
+import os
 
 #现在，让我们创建一个方法，通过重新将图片转换成PIL格式来展示，并使用plt.imshow展示它的拷贝。我们将尝试展示内容和风格图片来确保它们被正确的导入。
 unloader = transforms.ToPILImage()  # reconvert into PIL image
@@ -33,7 +34,7 @@ def imshow(tensor, title=None):
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # 所需的输出图像大小
-imsize = 512 if torch.cuda.is_available() else 128  # use small size if no gpu
+imsize = 256 if torch.cuda.is_available() else 128  # use small size if no gpu
  
 loader = transforms.Compose([
     transforms.Scale([imsize,imsize]),  # scale imported image
@@ -46,11 +47,16 @@ def image_loader(image_name):
     print("image: ",image.shape)
     return image.to(device, torch.float)
 
-style_img = image_loader("D:\TestData\style-transfer\style\style_dm_4.jpeg")
+
+work_dir = os.path.dirname(__file__)  # 当前文件所在的目录
+style_img_path = os.path.join(work_dir, "style_0.jpg")
+style_img = image_loader(style_img_path)
 plt.figure()
 imshow(style_img, title='Style Image')
 
-content_img = image_loader("D:\TestData\\test.jpg")
+
+content_img_path = os.path.join(work_dir, "content.jpg")
+content_img = image_loader(content_img_path)
 plt.figure()
 imshow(content_img, title='Content Image')
 
@@ -95,7 +101,7 @@ class StyleLoss(nn.Module):
         self.loss = F.mse_loss(G, self.target)
         return input
 
-cnn = models.vgg19(pretrained=True).features.to(device).eval()
+cnn = models.vgg16(pretrained=True).features.to(device).eval()
 
 cnn_normalization_mean = torch.tensor([0.485, 0.456, 0.406]).to(device)
 cnn_normalization_std = torch.tensor([0.229, 0.224, 0.225]).to(device)
@@ -235,7 +241,8 @@ def run_style_transfer(cnn, normalization_mean, normalization_std,
                 print('Style Loss : {:4f} Content Loss: {:4f}'.format(
                     style_score.item(), content_score.item()))
                 
-                torchvision.utils.save_image(input_img, f'D:/TestData/style-transfer/output-{run[0]}-{style_score}-{content_score}.jpg', padding=0, normalize=True)
+                save_img_path = os.path.join(work_dir, f"output-{run[0]}-{style_score:.2f}-{content_score:.2f}.jpg")
+                torchvision.utils.save_image(input_img, save_img_path, padding=0, normalize=True)
 
  
             return style_score + content_score
