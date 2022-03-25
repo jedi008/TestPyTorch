@@ -44,30 +44,38 @@ class Generator(nn.Module):
         super(Generator, self).__init__()
         self.ngpu = ngpu
         self.main = nn.Sequential(
-            # 输入是Z，进入卷积
-            nn.ConvTranspose2d( nz, ngf * 8, 4, 1, 0, bias=False),
+            # 输入是Z，进入卷积 input: torch.Size([64, 100, 1, 1])
+            nn.ConvTranspose2d( nz, ngf * 8, 4, 1, 0, bias=False), # 转置卷积，paddingnew = kernel_size - padding -1 = 4 - 0 - 1 = 3，最后再用kernel_size进行正常卷积
             nn.BatchNorm2d(ngf * 8),
             nn.ReLU(True),
-            # state size. (ngf*8) x 4 x 4
-            nn.ConvTranspose2d(ngf * 8, ngf * 4, 3, 2, 1, bias=False),
+            # state size. torch.Size([64, 512, 4, 4])
+            nn.ConvTranspose2d(ngf * 8, ngf * 4, 3, 2, 1, bias=False), # 转置卷积，stride=2时,数据矩阵各个数据间隔+1,4*4 ==> 7*7, 再paddingnew = kernel_size - padding -1 = 3 - 1 - 1 = 1，最后再用kernel_size进行正常卷积
             nn.BatchNorm2d(ngf * 4),
             nn.ReLU(True),
-            # state size. (ngf*4) x 8 x 8
-            nn.ConvTranspose2d( ngf * 4, ngf * 2, 3, 2, 1, bias=False),
+            # state size. torch.Size([64, 256, 7, 7])
+            nn.ConvTranspose2d( ngf * 4, ngf * 2, 3, 2, 1, bias=False),# 转置卷积，stride=2时,数据矩阵各个数据间隔+1,7*7 ==> 13*13, 再paddingnew = kernel_size - padding -1 = 3 -1 -1 = 1，最后再用kernel_size进行正常卷积
             nn.BatchNorm2d(ngf * 2),
             nn.ReLU(True),
-            # state size. (ngf*2) x 16 x 16
-            nn.ConvTranspose2d( ngf * 2, ngf, 3, 2, 1, bias=False),
+            # state size. torch.Size([64, 128, 13, 13])
+            nn.ConvTranspose2d( ngf * 2, ngf, 3, 2, 1, bias=False),# 转置卷积，stride=2时,数据矩阵各个数据间隔+1,13*13 ==> 25*25, 再paddingnew = kernel_size - padding -1 = 3 -1 -1 = 1，最后再用kernel_size进行正常卷积
             nn.BatchNorm2d(ngf),
             nn.ReLU(True),
-            # state size. (ngf) x 32 x 32
-            nn.ConvTranspose2d( ngf, nc, 4, 1, 0, bias=False),
+            # state size. torch.Size([64, 64, 25, 25])
+            nn.ConvTranspose2d( ngf, nc, 4, 1, 0, bias=False),# paddingnew = kernel_size - padding -1 = 4 - 0 - 1 = 3. so 25*25 ==> 31*31，最后再用kernel_size进行正常卷积
             nn.Tanh()
-            # state size. (nc) x 64 x 64
+            # state size. torch.Size([64, 1, 28, 28])
         )
 
     def forward(self, input):
         return self.main(input)
+        x = input
+        print("x.shape: ",x.shape)
+        for i in range( len(self.main) ):
+            print("i: ",i)
+            x = self.main[i](x)
+            print("x.shape: ",x.shape)
+        exit(0)
+        return x
 
     
 class Discriminator(nn.Module):
@@ -75,24 +83,25 @@ class Discriminator(nn.Module):
         super(Discriminator, self).__init__()
         self.ngpu = ngpu
         self.main = nn.Sequential(
-            # input is (nc) x 64 x 64
+            # input is 1 x 28 x 28
             nn.Conv2d(nc, ndf, 4, 2, 1, bias=False),
             nn.LeakyReLU(0.2, inplace=True),
-            # state size. (ndf) x 32 x 32
+            # state size. torch.Size([64, 28, 14, 14])
             nn.Conv2d(ndf, ndf * 2, 4, 2, 1, bias=False),
             nn.BatchNorm2d(ndf * 2),
             nn.LeakyReLU(0.2, inplace=True),
-            # state size. (ndf*2) x 16 x 16
+            # state size. torch.Size([64, 56, 7, 7])
             nn.Conv2d(ndf * 2, ndf * 4, 4, 2, 1, bias=False),
             nn.BatchNorm2d(ndf * 4),
             nn.LeakyReLU(0.2, inplace=True),
-            # state size. (ndf*4) x 8 x 8
+            # state size. torch.Size([64, 112, 3, 3])
             nn.Conv2d(ndf * 4, ndf * 8, 4, 2, 1, bias=False),
             nn.BatchNorm2d(ndf * 8),
             nn.LeakyReLU(0.2, inplace=True),
-            # state size. (ndf*8) x 4 x 4
+            # state size. torch.Size([64, 224, 1, 1])
             nn.Conv2d(ndf * 8, 1, 1, 1, 0, bias=False),
             nn.Sigmoid()
+            # state size. torch.Size([64, 1, 1, 1])
         )
 
     def forward(self, input):
@@ -128,7 +137,7 @@ if __name__ == '__main__':
     ngf = 64 #生成器中特征图的大小
 
     ndf = 28 #判别器中的特征映射的大小
-    num_epochs = 10
+    num_epochs = 5
     lr = 0.0002
     beta1 = 0.5
     ngpu = 1
@@ -138,7 +147,8 @@ if __name__ == '__main__':
     [transforms.ToTensor(),
      transforms.Normalize((0.5), (0.5))])
 
-    trainset = torchvision.datasets.MNIST(root='G:/AIData/pytorchData', train=True,
+    data_root = os.path.abspath(os.path.join(current_work_dir, "..", "data"))
+    trainset = torchvision.datasets.MNIST(root=data_root, train=True,
                                             download=True, transform=transform)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=64,
                                             shuffle=False,drop_last = True)
@@ -150,6 +160,7 @@ if __name__ == '__main__':
     
     
     
+    # 创建生成器
     netG = Generator(ngpu).to(device)
 
     #如果需要，管理multi-gpu
@@ -271,7 +282,7 @@ if __name__ == '__main__':
             iters += 1
 
         #保存/加载完整模型
-        savename = "{}/savepath/save_Generator_model-{}.pt".format(current_work_dir, epoch)
+        savename = "{}/weights/save_Generator_model-{}.pt".format(current_work_dir, epoch)
         print("savename: ",savename)
         torch.save( netG.state_dict(), savename )
             
@@ -303,7 +314,7 @@ if __name__ == '__main__':
     #imshow( fake[0] )
 
     netG = Generator(ngpu).to(device)
-    netG.load_state_dict( torch.load("D:/pythonproject/test/savepath/save_Generator_model-9.pt") )
+    netG.load_state_dict( torch.load(savename) )
 
     noise = torch.randn(batch_size, nz, 1, 1, device=device)
     fake = netG(noise).to( torch.device("cpu") ).detach() #to( torch.device("cpu") )
