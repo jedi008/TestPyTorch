@@ -19,7 +19,7 @@ input_size = 4  # input_size means the lengths of one-hot encode vector, for exa
 batch_size = 1
 seq_len = 5    # it means the length of the whole sequence  rather than one-hot encode vector
 
-hidden_size = 5
+hidden_size = 6
 
 # the vector dimension of input and output for every sample x
 Cell = nn.RNNCell(input_size=input_size, hidden_size=hidden_size)
